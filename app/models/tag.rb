@@ -24,7 +24,7 @@ class Tag < ApplicationRecord
     end
   end
 
-  validates :name, presence: :true
+  validates :name, presence: true
   validates :name, format: { with: /\A[\w\.:-]*[\w\.!-]*\z/, message: 'can only include letters, numbers, and dashes' }
   # validates :name, :uniqueness => { case_sensitive: false  }
 
@@ -43,7 +43,7 @@ class Tag < ApplicationRecord
 
   # nodes this tag has been used on; no wildcards
   def nodes
-    nodes = Node.where(nid: node_tag.collect(&:nid))
+    Node.where(nid: node_tag.collect(&:nid))
   end
 
   def self.nodes_frequency(starting, ending)
@@ -60,6 +60,7 @@ class Tag < ApplicationRecord
   def self.contributors(tagname)
     tag = Tag.includes(:node).where(name: tagname).first
     return [] if tag.nil?
+
     nodes = tag.node.includes(:revision, :comments, :answers).where(status: 1)
     uids = nodes.collect(&:uid)
     nodes.each do |n|
@@ -125,6 +126,7 @@ class Tag < ApplicationRecord
                                        .collect(&:nid)
       tag = Tag.where(name: tagname).last
       next unless tag
+
       parents = Node.where(status: 1, type: type)
                     .includes(:revision, :tag)
                     .references(:term_data)
@@ -174,14 +176,18 @@ class Tag < ApplicationRecord
 
   def self.sort_according_to_followers(raw_tags, order)
     tags_with_their_followers = []
+
     raw_tags.each do |i|
       tags_with_their_followers << { "number_of_followers" => Tag.follower_count(i.name), "tags" => i }
     end
+
     tags_with_their_followers.sort_by! { |key| key["number_of_followers"] }
+
     if order != "asc"
       tags_with_their_followers.reverse!
     end
-    tags = tags_with_their_followers.map { |x| x["tags"] }
+
+    tags_with_their_followers.map { |x| x["tags"] }
   end
 
   # OPTIMIZE: this too!
@@ -285,18 +291,21 @@ class Tag < ApplicationRecord
     all_tag = Tag.find_by(name: 'everything')
     tids += [all_tag.tid] if all_tag
     usertags = TagSelection.where('tid IN (?) AND following = ?', tids, true)
-    d = {}
+
+    usertags_hash = {}
+
     usertags.each do |usertag|
       # For each row of (user,tag), build a user's tag subscriptions
-      if (usertag.tid == all_tag) && usertag.tag.nil?
-        puts 'WARNING: all_tag tid ' + String(all_tag) + ' not found for Tag! Please correct this!'
+      if (usertag.tid == all_tag) && usertag.tag.blank?
+        Rails.logger.warn('WARNING: all_tag tid ' + all_tag.to_s + ' not found for Tag! Please correct this!')
         next
       end
-      d[usertag.user.name] = { user: usertag.user }
-      d[usertag.user.name][:tags] = Set.new if d[usertag.user.name][:tags].nil?
-      d[usertag.user.name][:tags].add(usertag.tag)
+      usertags_hash[usertag.user.name] = { user: usertag.user }
+      usertags_hash[usertag.user.name][:tags] = Set.new if usertags_hash[usertag.user.name][:tags].nil?
+      usertags_hash[usertag.user.name][:tags].add(usertag.tag)
     end
-    d
+
+    usertags_hash
   end
 
   def self.find_research_notes(tagnames, limit = 10)
@@ -392,5 +401,4 @@ class Tag < ApplicationRecord
       data
     end
   end
-
 end
